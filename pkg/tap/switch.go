@@ -83,9 +83,10 @@ func (e *Switch) Accept(ctx context.Context, rawConn net.Conn, protocol types.Pr
 	log.Debugf("new connection from %s to %s", conn.RemoteAddr().String(), conn.LocalAddr().String())
 	id, failed := e.connect(conn)
 	if failed {
-		log.Error("connection failed")
-		return conn.Close()
-
+		panic("currenty this will never happen, if it ever does the return logic here needs to be fixed")
+		// go conn.Close()
+		// log.Error("connection failed")
+		// return conn.Close()
 	}
 
 	defer func() {
@@ -94,7 +95,11 @@ func (e *Switch) Accept(ctx context.Context, rawConn net.Conn, protocol types.Pr
 		e.disconnect(id, conn)
 	}()
 	if err := e.rx(ctx, id, conn); err != nil {
-		log.Error(errors.Wrapf(err, "cannot receive packets from %s, disconnecting", conn.RemoteAddr().String()))
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			log.Debugf("context done, disconnecting from %s: %s", conn.RemoteAddr().String(), err)
+		} else {
+			log.Error(errors.Wrapf(err, "cannot receive packets from %s, disconnecting", conn.RemoteAddr().String()))
+		}
 		return err
 	}
 	return nil
@@ -208,11 +213,11 @@ func (e *Switch) rx(ctx context.Context, id int, conn protocolConn) error {
 func (e *Switch) rxNonStream(ctx context.Context, id int, conn net.Conn) error {
 	bufSize := 1024 * 128
 	buf := make([]byte, bufSize)
-loop:
+
 	for {
 		select {
 		case <-ctx.Done():
-			break loop
+			return ctx.Err()
 		default:
 			// passthrough
 		}
@@ -222,17 +227,16 @@ loop:
 		}
 		e.rxBuf(ctx, id, buf[:n])
 	}
-	return nil
 }
 
 func (e *Switch) rxStream(ctx context.Context, id int, conn net.Conn, sProtocol streamProtocol) error {
 	reader := bufio.NewReader(conn)
 	sizeBuf := sProtocol.Buf()
-loop:
+
 	for {
 		select {
 		case <-ctx.Done():
-			break loop
+			return ctx.Err()
 		default:
 			// passthrough
 		}
@@ -249,7 +253,6 @@ loop:
 		}
 		e.rxBuf(ctx, id, buf)
 	}
-	return nil
 }
 
 func (e *Switch) rxBuf(_ context.Context, id int, buf []byte) {

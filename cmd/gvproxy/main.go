@@ -320,7 +320,7 @@ func run(ctx context.Context, g *errgroup.Group, configuration *types.Configurat
 		if err != nil {
 			return errors.Wrap(err, "cannot listen")
 		}
-		httpServe(ctx, g, ln, withProfiler(vn))
+		httpServe(ctx, g, ln, withProfiler(ctx, vn))
 	}
 
 	if servicesEndpoint != "" {
@@ -337,9 +337,9 @@ func run(ctx context.Context, g *errgroup.Group, configuration *types.Configurat
 		return err
 	}
 	mux := http.NewServeMux()
-	mux.Handle("/services/forwarder/all", vn.Mux())
-	mux.Handle("/services/forwarder/expose", vn.Mux())
-	mux.Handle("/services/forwarder/unexpose", vn.Mux())
+	mux.Handle("/services/forwarder/all", vn.Mux(ctx))
+	mux.Handle("/services/forwarder/expose", vn.Mux(ctx))
+	mux.Handle("/services/forwarder/unexpose", vn.Mux(ctx))
 	httpServe(ctx, g, ln, mux)
 
 	if debug {
@@ -539,8 +539,8 @@ func httpServe(ctx context.Context, g *errgroup.Group, ln net.Listener, mux http
 	})
 }
 
-func withProfiler(vn *virtualnetwork.VirtualNetwork) http.Handler {
-	mux := vn.Mux()
+func withProfiler(ctx context.Context, vn *virtualnetwork.VirtualNetwork) http.Handler {
+	mux := vn.Mux(ctx)
 	if debug {
 		mux.HandleFunc("/debug/pprof/", pprof.Index)
 		mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)

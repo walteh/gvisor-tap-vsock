@@ -3,6 +3,7 @@ package virtualnetwork
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"strconv"
@@ -19,13 +20,22 @@ func (n *VirtualNetwork) ServicesMux() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.Handle("/services/", http.StripPrefix("/services", n.servicesMux))
 	mux.HandleFunc("/stats", func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(statsAsJSON(n.networkSwitch.Sent, n.networkSwitch.Received, n.stack.Stats()))
+		err := json.NewEncoder(w).Encode(statsAsJSON(n.networkSwitch.Sent, n.networkSwitch.Received, n.stack.Stats()))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	})
 	mux.HandleFunc("/cam", func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(n.networkSwitch.CAM())
+		err := json.NewEncoder(w).Encode(n.networkSwitch.CAM())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	})
 	mux.HandleFunc("/leases", func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(n.ipPool.Leases())
+		err := json.NewEncoder(w).Encode(n.ipPool.Leases())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	})
 	mux.HandleFunc("/tunnel", func(w http.ResponseWriter, r *http.Request) {
 		ip := r.URL.Query().Get("ip")
@@ -79,7 +89,7 @@ func (n *VirtualNetwork) ServicesMux() *http.ServeMux {
 	return mux
 }
 
-func (n *VirtualNetwork) Mux() *http.ServeMux {
+func (n *VirtualNetwork) Mux(ctx context.Context) *http.ServeMux {
 	mux := n.ServicesMux()
 	mux.HandleFunc(types.ConnectPath, func(w http.ResponseWriter, _ *http.Request) {
 		hj, ok := w.(http.Hijacker)
@@ -99,7 +109,14 @@ func (n *VirtualNetwork) Mux() *http.ServeMux {
 			return
 		}
 
-		_ = n.networkSwitch.Accept(context.Background(), conn, n.configuration.Protocol)
+		err = n.networkSwitch.Accept(ctx, conn, n.configuration.Protocol)
+		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				http.Error(w, "context done, disconnecting: "+err.Error(), http.StatusOK)
+			} else {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+		}
 	})
 	return mux
 }
