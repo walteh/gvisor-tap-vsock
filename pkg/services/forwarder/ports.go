@@ -67,7 +67,9 @@ func NewPortsForwarder(s *stack.Stack) *PortsForwarder {
 	}
 }
 
-func (f *PortsForwarder) Expose(protocol types.TransportProtocol, local, remote string) error {
+
+
+func (f *PortsForwarder) Expose(protocol types.TransportProtocol, local, remote string, rawListener net.Listener) error {
 	f.proxiesLock.Lock()
 	defer f.proxiesLock.Unlock()
 	if _, ok := f.proxies[key(protocol, local)]; ok {
@@ -232,6 +234,12 @@ func (f *PortsForwarder) Expose(protocol types.TransportProtocol, local, remote 
 		}
 
 		var p tcpproxy.Proxy
+		if rawListener != nil {
+			p.ListenFunc = func(_, _ string) (net.Listener, error) {
+				return rawListener, nil
+			}
+			local = rawListener.Addr().String()
+		}
 		p.AddRoute(local, &tcpproxy.DialProxy{
 			Addr: remote,
 			DialContext: func(ctx context.Context, _, _ string) (conn net.Conn, e error) {
@@ -317,7 +325,7 @@ func (f *PortsForwarder) Mux() http.Handler {
 			}
 		}
 
-		if err := f.Expose(req.Protocol, req.Local, remoteAddr); err != nil {
+		if err := f.Expose(req.Protocol, req.Local, remoteAddr, nil); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -391,4 +399,8 @@ func tcpipAddress(nicID tcpip.NICID, remote string) (address tcpip.FullAddress, 
 	}
 
 	return address, err
+}
+
+func TCPIPAddress(nicID tcpip.NICID, remote string) (tcpip.FullAddress, error) {
+	return tcpipAddress(nicID, remote)
 }

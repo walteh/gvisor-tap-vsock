@@ -110,13 +110,18 @@ func forwardHostVM(configuration *types.Configuration, s *stack.Stack) (http.Han
 	fw := forwarder.NewPortsForwarder(s)
 	for local, remote := range configuration.Forwards {
 		if strings.HasPrefix(local, "udp:") {
-			if err := fw.Expose(types.UDP, strings.TrimPrefix(local, "udp:"), remote); err != nil {
+			if err := fw.Expose(types.UDP, strings.TrimPrefix(local, "udp:"), remote, nil); err != nil {
 				return nil, err
 			}
 		} else {
-			if err := fw.Expose(types.TCP, local, remote); err != nil {
+			if err := fw.Expose(types.TCP, local, remote, nil); err != nil {
 				return nil, err
 			}
+		}
+	}
+	for remote, rawListener := range configuration.RawForwards {
+		if err := fw.Expose(types.TCP, remote, remote, rawListener); err != nil {
+			return nil, err
 		}
 	}
 	return fw.Mux(), nil
