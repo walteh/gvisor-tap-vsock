@@ -3,6 +3,7 @@ package tap
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"sync"
@@ -132,6 +133,10 @@ func (e *Switch) txPkt(pkt *stack.PacketBuffer) error {
 	dst := eth.DestinationAddress()
 	src := eth.SourceAddress()
 
+	size := pkt.Size()
+	if size < 0 {
+		return fmt.Errorf("packet size out of range")
+	}
 	if dst == header.EthernetBroadcastAddress {
 		e.camLock.RLock()
 		srcID, ok := e.cam[src]
@@ -149,7 +154,7 @@ func (e *Switch) txPkt(pkt *stack.PacketBuffer) error {
 				return err
 			}
 
-			atomic.AddUint64(&e.Sent, uint64(pkt.Size()))
+			atomic.AddUint64(&e.Sent, uint64(size))
 		}
 	} else {
 		e.camLock.RLock()
@@ -164,7 +169,7 @@ func (e *Switch) txPkt(pkt *stack.PacketBuffer) error {
 		if err != nil {
 			return err
 		}
-		atomic.AddUint64(&e.Sent, uint64(pkt.Size()))
+		atomic.AddUint64(&e.Sent, uint64(size))
 	}
 	return nil
 }
