@@ -34,6 +34,11 @@ type Configuration struct {
 	// Port forwarding between the machine running the gateway and the virtual network.
 	Forwards map[string]string
 
+	// Raw port forwarding between the machine running the gateway and the virtual network.
+	// Useful for reaching the host itself (localhost) from the virtual network.
+	// The key is the port on the remote machine, which is opposite of the "Forwards" map.
+	RawForwards map[string]net.Listener
+
 	// Address translation of incoming traffic.
 	// Useful for reaching the host itself (localhost) from the virtual network.
 	NAT map[string]string
